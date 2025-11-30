@@ -20,51 +20,47 @@ func NewService(repo Repository) *Service {
 	return &Service{repo: repo}
 }
 
-// CheckLinks checks a list of URLs and saves the result.
-func (s *Service) CheckLinks(urls []string) (int, []LinkInformation) {
-	results := s.checkURLs(urls)
-	id := s.repo.Set(results)
-	return id, results
+func (s *Service) ValidLinks(urls []string) (int, []LinkInformation) {
+
+	res := s.checkURLs(urls)
+	id := s.repo.Set(res)
+
+	return id, res
 }
 
-// GetLinks retrieves links by ID. If expired, it re-checks and updates them.
-func (s *Service) GetLinks(id int) ([]LinkInformation, bool) {
-	links, isExists, expired := s.repo.Get(id)
+func (s *Service) GetStatuses(id int) ([]LinkInformation, bool) {
+
+	links, isExists, isExpired := s.repo.Get(id)
 	if !isExists {
 		return nil, false
 	}
 
-	if expired {
-		// Extract URLs from the expired data
+	if isExpired {
 		var urls []string
 		for _, l := range links {
 			urls = append(urls, l.URL)
 		}
 
-		// Re-check
-		newResults := s.checkURLs(urls)
+		newRes := s.checkURLs(urls)
+		s.repo.Update(id, newRes)
 
-		// Update storage
-		s.repo.Update(id, newResults)
-
-		return newResults, true
+		return newRes, true
 	}
 
 	return links, true
 }
 
 func (s *Service) checkURLs(urls []string) []LinkInformation {
-	var wg sync.WaitGroup
-	results := make([]LinkInformation, len(urls))
 
-	for i, u := range urls {
+	var wg sync.WaitGroup
+	res := make([]LinkInformation, len(urls))
+
+	for i, rawUrl := range urls {
 		wg.Add(1)
-		go func(index int, rawURL string) {
+		go func(i int, rawURL string) {
 			defer wg.Done()
 
-			// Determine scheme and host for the user's checkURL function
-			// Assuming input might be "google.com" or "https://google.com"
-			scheme := "http"
+			scheme := "https"
 			host := rawURL
 
 			if strings.Contains(rawURL, "://") {
@@ -75,77 +71,60 @@ func (s *Service) checkURLs(urls []string) []LinkInformation {
 				}
 			}
 
-			status, _ := checkURL(host, scheme)
-
-			results[index] = LinkInformation{
-				URL:    rawURL,
-				Status: LinkStatus(status), // Casting string to LinkStatus
-			}
-		}(i, u)
+			status := checkURL(host, scheme)
+			res[i] = LinkInformation{URL: rawURL, Status: LinkStatus(status)}
+		}(i, rawUrl)
 	}
 
 	wg.Wait()
-	return results
+
+	return res
 }
 
-// User's provided checkURL function (slightly adapted for package usage if needed)
-func checkURL(page, scheme string) (string, time.Duration) {
+func checkURL(page, scheme string) (string) {
+
 	rawURL := scheme + "://" + page
 
-	// Fix: url.Parse might fail if page contains path, but assuming simple host for now
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
-		return "not available", 0
+		return "not available"
 	}
 
-	// Basic validation
 	if parsedURL.Scheme != scheme {
-		return "not available", 0
+		return "not available"
 	}
 
-	start := time.Now()
-	client := http.Client{Timeout: 2 * time.Second}
+	client := http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get(rawURL)
-	duration := time.Since(start)
 	if err != nil {
-		return "not available", duration
+		return "not available"
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusOK {
-		return "available", duration
+		return "available"
 	} else {
-		return "not available", duration
+		return "not available"
 	}
 }
 
-// GenerateReport generates a PDF report for the given IDs.
-func (s *Service) GenerateReport(ids []int) ([]byte, error) {
-	pdf := fpdf.New("P", "mm", "A4", "")
+func (s *Service) GeneratePDF(ids []int) ([]byte, error) {
+	
+	pdf := fpdf.New(fpdf.OrientationPortrait, fpdf.UnitPoint, fpdf.PageSizeA4, "")
 	pdf.AddPage()
-	pdf.SetFont("Arial", "B", 16)
-	pdf.Cell(40, 10, "Link Check Report")
-	pdf.Ln(12)
-
-	pdf.SetFont("Arial", "", 12)
+	pdf.SetFont("Courier", "", 12)
 
 	for _, id := range ids {
-		links, found := s.GetLinks(id)
-		if !found {
+		links, found := s.GetStatuses(id)
+		if !found || len(links) == 0 {
 			continue
 		}
 
-		pdf.SetFont("Arial", "B", 12)
-		pdf.Cell(0, 10, fmt.Sprintf("Request ID: %d", id))
-		pdf.Ln(8)
-
-		pdf.SetFont("Arial", "", 10)
 		for _, link := range links {
-			pdf.Cell(100, 8, link.URL)
-			pdf.Cell(50, 8, string(link.Status))
-			pdf.Ln(6)
+			pdf.Cell(0, 12, fmt.Sprintf("%s - %s", link.URL, string(link.Status)))
+			pdf.Ln(10)
 		}
-		pdf.Ln(4)
+		pdf.Ln(6)
 	}
 
 	var buf bytes.Buffer
