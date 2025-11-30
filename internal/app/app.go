@@ -21,7 +21,7 @@ type App struct {
 	repo   *links.Storage
 }
 
-func New(ctx context.Context) (*App, error) {
+func New() (*App, error) {
 
 	repo := links.NewStorage(ttl)
 
