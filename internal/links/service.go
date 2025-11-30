@@ -72,7 +72,7 @@ func (s *Service) checkURLs(urls []string) []LinkInformation {
 			}
 
 			status := checkURL(host, scheme)
-			res[i] = LinkInformation{URL: rawURL, Status: LinkStatus(status)}
+			res[i] = LinkInformation{URL: rawURL, Status: status}
 		}(i, rawUrl)
 	}
 
@@ -81,35 +81,35 @@ func (s *Service) checkURLs(urls []string) []LinkInformation {
 	return res
 }
 
-func checkURL(page, scheme string) (string) {
+func checkURL(page, scheme string) LinkStatus {
 
 	rawURL := scheme + "://" + page
 
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
-		return "not available"
+		return LinkStatusNotAvailable
 	}
 
 	if parsedURL.Scheme != scheme {
-		return "not available"
+		return LinkStatusNotAvailable
 	}
 
 	client := http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get(rawURL)
 	if err != nil {
-		return "not available"
+		return LinkStatusNotAvailable
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusOK {
-		return "available"
+		return LinkStatusAvailable
 	} else {
-		return "not available"
+		return LinkStatusNotAvailable
 	}
 }
 
 func (s *Service) GeneratePDF(ids []int) ([]byte, error) {
-	
+
 	pdf := fpdf.New(fpdf.OrientationPortrait, fpdf.UnitPoint, fpdf.PageSizeA4, "")
 	pdf.AddPage()
 	pdf.SetFont("Courier", "", 12)
