@@ -51,6 +51,9 @@ func (s *Storage) Set(links []LinkInformation) int {
 	defer s.mu.Unlock()
 
 	id := s.groupID
+	for i := range links {
+		links[i].LinkNum = id
+	}
 	s.store[id] = Cache{
 		Data:      links,
 		ExpiresAt: time.Now().Add(s.ttl),
@@ -99,10 +102,13 @@ func (s *Storage) ReadFromJSONFile(filename string) error {
 
 	data, err := os.ReadFile(filename)
 	if err != nil {
-		if os.IsNotExist(err) || len(data) == 0 {
+		if os.IsNotExist(err) {
 			return nil
 		}
 		return fmt.Errorf("file not exist or empty: %w", err)
+	}
+	if len(data) == 0 {
+		return nil
 	}
 
 	if err := json.Unmarshal(data, &s.store); err != nil {
