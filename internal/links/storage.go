@@ -7,16 +7,16 @@ import (
 	"time"
 )
 
+type Cache struct {
+	Data      []LinkInformation `json:"data"`
+	ExpiresAt time.Time         `json:"expires_at"`
+}
+
 type Storage struct {
 	store   map[int]Cache
 	ttl     time.Duration
 	groupID int
 	mu      sync.RWMutex
-}
-
-type Cache struct {
-	Data      []LinkInformation `json:"data"`
-	ExpiresAt time.Time         `json:"expires_at"`
 }
 
 func NewStorage(ttl time.Duration) *Storage {
@@ -27,22 +27,25 @@ func NewStorage(ttl time.Duration) *Storage {
 	}
 }
 
-func (s *Storage) Get(id int) (links []LinkInformation, isExists bool, expired bool) {
-	
+func (s *Storage) Get(id int) ([]LinkInformation, bool, bool) {
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	item, ok := s.store[id]
+	var isExists bool
+	data, ok := s.store[id]
 	if !ok {
-		return nil, false, false
+		return nil, isExists, false
 	}
 
-	isExpired := time.Now().After(item.ExpiresAt)
-	return item.Data, true, isExpired
+	isExpired := time.Now().After(data.ExpiresAt)
+	isExists = true
+
+	return data.Data, isExists, isExpired
 }
 
 func (s *Storage) Set(links []LinkInformation) int {
-	
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -58,7 +61,7 @@ func (s *Storage) Set(links []LinkInformation) int {
 }
 
 func (s *Storage) Update(id int, links []LinkInformation) {
-	
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -70,48 +73,48 @@ func (s *Storage) Update(id int, links []LinkInformation) {
 	}
 }
 
-func (s *Storage) SaveToFile(filename string) error {
-	
+func (s *Storage) SaveToJSONFile(filename string) error {
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	data, err := json.MarshalIndent(s.store, "", "  ")
+	jsonData, err := json.MarshalIndent(s.store, "", "  ")
 	if err != nil {
 		return err
 	}
 
-	return os.WriteFile(filename, data, 0644)
+	tmpFile := filename + ".tmp"
+	if err := os.WriteFile(tmpFile, jsonData, 0644); err != nil {
+		return err
+	}
+
+	return os.Rename(tmpFile, filename)
 }
 
-// LoadFromFile loads the storage state from a JSON file.
-func (s *Storage) LoadFromFile(filename string) error {
+func (s *Storage) ReadFromJSONFile(filename string) error {
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	data, err := os.ReadFile(filename)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil // File doesn't exist, start empty
+		if os.IsNotExist(err) || len(data) == 0 {
+			return nil
 		}
 		return err
-	}
-
-	if len(data) == 0 {
-		return nil
 	}
 
 	if err := json.Unmarshal(data, &s.store); err != nil {
 		return err
 	}
 
-	// Update groupID to avoid collisions
-	maxID := 0
+	max := 0
 	for id := range s.store {
-		if id > maxID {
-			maxID = id
+		if id > max {
+			max = id
 		}
 	}
-	s.groupID = maxID + 1
+	s.groupID = max + 1
 
 	return nil
 }
