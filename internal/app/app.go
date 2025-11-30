@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/guarref/link-checking-service/internal/links"
-	"github.com/guarref/link-checking-service/internal/web"
+	"github.com/guarref/link-checking-service/internal/handler"
 )
 
 const (
