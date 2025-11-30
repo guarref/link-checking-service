@@ -2,6 +2,7 @@ package links
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"sync"
 	"time"
@@ -80,12 +81,12 @@ func (s *Storage) SaveToJSONFile(filename string) error {
 
 	jsonData, err := json.MarshalIndent(s.store, "", "  ")
 	if err != nil {
-		return err
+		return fmt.Errorf("error serialization in SaveToJSONFile: %w", err)
 	}
 
 	tmpFile := filename + ".tmp"
 	if err := os.WriteFile(tmpFile, jsonData, 0644); err != nil {
-		return err
+		return fmt.Errorf("error writing into tmp-file: %w", err)
 	}
 
 	return os.Rename(tmpFile, filename)
@@ -101,11 +102,11 @@ func (s *Storage) ReadFromJSONFile(filename string) error {
 		if os.IsNotExist(err) || len(data) == 0 {
 			return nil
 		}
-		return err
+		return fmt.Errorf("file not exist or empty: %w", err)
 	}
 
 	if err := json.Unmarshal(data, &s.store); err != nil {
-		return err
+		return fmt.Errorf("error deserialization in ReadFromJSONFile: %w", err)
 	}
 
 	max := 0

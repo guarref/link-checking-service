@@ -129,7 +129,7 @@ func (s *Service) GeneratePDF(ids []int) ([]byte, error) {
 
 	var buf bytes.Buffer
 	if err := pdf.Output(&buf); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error pdf parsing: %w", err)
 	}
 
 	return buf.Bytes(), nil
